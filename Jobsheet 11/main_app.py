@@ -3,6 +3,8 @@ import streamlit as st
 import datetime
 import pandas as pd
 import locale
+import time
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
 try:
     locale.setlocale(locale.LC_ALL, 'id_ID.UTF-8')
@@ -63,25 +65,83 @@ def halaman_input(anggaran: AnggaranHarian):
 
 def halaman_riwayat(anggaran: AnggaranHarian):
     st.subheader("Riwayat Transaksi")
-    if st.button("Refresh"):
+
+    if st.button("🔄 Refresh"):
         st.cache_data.clear()
         st.rerun()
 
-    df_transaksi = anggaran.get_dataframe_transaksi()
-    if df_transaksi.empty:
+    transaksi_list = anggaran.get_semua_transaksi_obj()
+    if not transaksi_list:
         st.info("Belum ada transaksi.")
-    else:
-        st.dataframe(df_transaksi, use_container_width=True, hide_index=True)
+        return
 
-        id_hapus = st.number_input("Masukkan ID Transaksi untuk dihapus:", min_value=1, step=1)
-        if st.button("Hapus Transaksi"):
-            if st.confirm("Yakin ingin menghapus transaksi?"):
-                if anggaran.hapus_transaksi(id_hapus):
-                    st.success("Transaksi berhasil dihapus.")
-                    st.cache_data.clear()
-                    st.rerun()
+    st.markdown("""
+    <style>
+        .tabel-header div {
+            font-weight: bold;
+            background-color: #EEE;
+            padding: 6px 0;
+            border-bottom: 1px solid #CCC;
+        }
+        .tabel-baris:hover {
+            background-color: #f9f9f9;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    cols = st.columns([1, 2, 3, 2, 1])  
+    with cols[0]:
+        st.markdown("**ID**")
+    with cols[1]:
+        st.markdown("**Tanggal**")
+    with cols[2]:
+        st.markdown("**Deskripsi**")
+    with cols[3]:
+        st.markdown("**Jumlah (Rp)**")
+    with cols[4]:
+        st.markdown("**Aksi**")
+
+
+    if "hapus_id" not in st.session_state:
+        st.session_state.hapus_id = None
+
+    for transaksi in transaksi_list:
+        cols = st.columns([1, 2, 3, 2, 1])
+        with cols[0]:
+            st.write(transaksi.id)
+        with cols[1]:
+            st.write(transaksi.tanggal.strftime("%d %b %Y"))
+        with cols[2]:
+            st.write(transaksi.deskripsi)
+        with cols[3]:
+            st.write(f"Rp {transaksi.jumlah:,.0f}")
+        with cols[4]:
+            if st.button("Hapus", key=f"hapus_{transaksi.id}"):
+                st.session_state.hapus_id = transaksi.id
+
+
+    
+    if st.session_state.hapus_id is not None:
+        st.warning(f"Yakin ingin menghapus transaksi ID {st.session_state.hapus_id}?")
+        col_konfirmasi, col_batal = st.columns([1, 1])
+        with col_konfirmasi:
+            if st.button("✅ Konfirmasi Hapus"):
+                sukses = anggaran.hapus_transaksi(st.session_state.hapus_id)
+                if sukses:
+                    st.success(f"✅ Transaksi ID {st.session_state.hapus_id} berhasil dihapus.")
                 else:
-                    st.error("Gagal menghapus transaksi.")
+                    st.error(f"❌ Gagal menghapus transaksi ID {st.session_state.hapus_id}.")
+                time.sleep(1)
+                
+                st.session_state.hapus_id = None
+                st.cache_data.clear()
+                st.rerun() 
+        with col_batal:
+            if st.button("❌ Batal"):
+                st.session_state.hapus_id = None
+                st.rerun()
+
+
 
 def halaman_ringkasan(anggaran: AnggaranHarian):
     st.subheader("Ringkasan Pengeluaran")
